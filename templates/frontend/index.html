@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Library App</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'frontend/app.css' %}" />
+  </head>
+  <body>
+    <div id="root">
+      <main class="app-shell">
+        <h1>Library App</h1>
+        <p>The backend is ready to serve the frontend experience.</p>
+        <p>Use the API under /api/v1/ and the app shell will handle client-side routes.</p>
+      </main>
+    </div>
+    <script src="{% static 'frontend/app.js' %}"></script>
+  </body>
+</html>

@@ -1,0 +1,206 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Library Backend API",
+    "version": "1.0.0",
+    "description": "Curated OpenAPI spec for the existing Django REST Framework endpoints. Authentication uses JWT (SimpleJWT)."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/health/": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/token/": {
+      "post": {
+        "summary": "Get access/refresh token (JWT)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JWT tokens",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access": { "type": "string" },
+                    "refresh": { "type": "string" },
+                    "user": { "type": "object" },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/token/refresh/": {
+      "post": {
+        "summary": "Refresh JWT access token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["refresh"],
+                "properties": {
+                  "refresh": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "New access token" }
+        }
+      }
+    },
+    "/api/v1/auth/auth/register/": {
+      "post": {
+        "summary": "Register user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password", "password2"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "first_name": { "type": "string" },
+                  "last_name": { "type": "string" },
+                  "password": { "type": "string" },
+                  "password2": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "User created" }
+        }
+      }
+    },
+    "/api/v1/auth/auth/login/": {
+      "post": {
+        "summary": "Login user and return JWT tokens (custom endpoint)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Login successful" },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/api/v1/auth/auth/me/": {
+      "get": {
+        "summary": "Get current user profile",
+        "responses": {
+          "200": { "description": "Current user profile" }
+        }
+      }
+    },
+
+    "/api/v1/categories/": {
+      "get": { "summary": "List categories", "responses": { "200": { "description": "OK" } } },
+      "post": { "summary": "Create category", "responses": { "201": { "description": "Created" } } }
+    },
+    "/api/v1/faculties/": {
+      "get": { "summary": "List faculties", "responses": { "200": { "description": "OK" } } },
+      "post": { "summary": "Create faculty", "responses": { "201": { "description": "Created" } } }
+    },
+    "/api/v1/vendors/": {
+      "get": { "summary": "List vendors", "responses": { "200": { "description": "OK" } } }
+    },
+    "/api/v1/books/": {
+      "get": {
+        "summary": "List books (supports filters: category, faculty, vendor, min_price, max_price, min_rating, featured, in_stock)",
+        "responses": { "200": { "description": "OK" } }
+      },
+      "post": { "summary": "Create book", "responses": { "201": { "description": "Created" } } }
+    },
+    "/api/v1/books/{slug}/reviews/": {
+      "get": {
+        "summary": "Get reviews for a book",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/v1/cart/": {
+      "get": { "summary": "Get user's cart", "responses": { "200": { "description": "OK" } } },
+      "post": { "summary": "Add item to cart", "responses": { "200": { "description": "Updated cart" } } }
+    },
+    "/api/v1/wishlist/": {
+      "get": { "summary": "Get user's wishlist", "responses": { "200": { "description": "OK" } } }
+    },
+    "/api/v1/orders/": {
+      "get": { "summary": "List orders for current user", "responses": { "200": { "description": "OK" } } },
+      "post": { "summary": "Create order from cart", "responses": { "201": { "description": "Order created" } } }
+    },
+    "/api/v1/reviews/": {
+      "get": { "summary": "List reviews", "responses": { "200": { "description": "OK" } } }
+    }
+  }
+}
+

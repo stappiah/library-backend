@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>API Docs - Library Backend</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; padding: 0 16px; }
+      header { padding: 16px 0; border-bottom: 1px solid #eee; }
+      .meta { color: #666; font-size: 14px; margin-top: 6px; }
+      #swagger-ui { padding: 16px 0 40px; }
+    </style>
+    <!-- Swagger UI (CDN) -->
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Library Backend API</h1>
+      <div class="meta">JWT auth: Authorization: Bearer <access_token></div>
+    </header>
+
+    <div id="swagger-ui"></div>
+
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+      window.onload = function () {
+        fetch("/static/api/openapi.json")
+          .then((r) => r.json())
+          .then((spec) => {
+            const ui = SwaggerUIBundle({
+              spec,
+              dom_id: "#swagger-ui",
+              deepLinking: true,
+              presets: [SwaggerUIBundle.presets.apis],
+              layout: "BaseLayout",
+              displayOperationId: true
+            });
+            window.ui = ui;
+          })
+          .catch((e) => {
+            document.getElementById("swagger-ui").innerHTML =
+              "Failed to load /static/api/openapi.json: " + e;
+          });
+      };
+    </script>
+  </body>
+</html>
+
