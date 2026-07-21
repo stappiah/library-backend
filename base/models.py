@@ -153,6 +153,26 @@ class Book(models.Model):
             return int(((self.price - self.discount_price) / self.price) * 100)
         return 0
 
+    def get_image_url_safe(self, request=None):
+        """Return the best available image URL.
+        
+        Priority:
+        1. `image_url` (external URL like Cloudinary/ImgBB)
+        2. `image.url` (local upload or Cloudinary if DEFAULT_FILE_STORAGE is cloudinary)
+        3. None
+        """
+        if self.image_url:
+            return self.image_url
+        if self.image:
+            try:
+                url = self.image.url
+                if request:
+                    return request.build_absolute_uri(url)
+                return url
+            except Exception:
+                return None
+        return None
+
 
 class BookImage(models.Model):
     """Additional Book Images for Gallery"""

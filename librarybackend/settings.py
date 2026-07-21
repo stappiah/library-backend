@@ -50,9 +50,14 @@ INSTALLED_APPS = [
     "corsheaders",
     "account",
     "base",
-    "cloudinary_storage",
-    "cloudinary",
 ]
+
+# Cloudinary apps (optional - only if cloudinary_storage is installed)
+try:
+    import cloudinary_storage
+    INSTALLED_APPS.extend(["cloudinary_storage", "cloudinary"])
+except ImportError:
+    pass
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -207,15 +212,21 @@ SIMPLE_JWT = {
 
 # Cloudinary storage (production uploads)
 # Requires env vars: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
-CLOUDINARY_STORAGE = {
-    "CLOUD_NAME": config("CLOUDINARY_CLOUD_NAME"),
-    "API_KEY": config("CLOUDINARY_API_KEY"),
-    "API_SECRET": config("CLOUDINARY_API_SECRET"),
-}
+# All three are optional — if missing, local file storage is used instead.
+CLOUDINARY_CLOUD_NAME = config("CLOUDINARY_CLOUD_NAME", default=None)
+CLOUDINARY_API_KEY = config("CLOUDINARY_API_KEY", default=None)
+CLOUDINARY_API_SECRET = config("CLOUDINARY_API_SECRET", default=None)
 
-# If you want Cloudinary to be the default storage backend for uploaded files,
-# uncomment the next line and ensure models use ImageField/FileField normally.
-DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
+    CLOUDINARY_STORAGE = {
+        "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
+        "API_KEY": CLOUDINARY_API_KEY,
+        "API_SECRET": CLOUDINARY_API_SECRET,
+    }
+    DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+else:
+    CLOUDINARY_STORAGE = {}
+    DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
 
 
 # Default Primary Key Field Type

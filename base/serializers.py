@@ -66,10 +66,7 @@ class BookListSerializer(serializers.ModelSerializer):
         ]
 
     def get_image_url(self, obj):
-        request = self.context.get('request')
-        if obj.image and request:
-            return request.build_absolute_uri(obj.image.url)
-        return obj.image_url
+        return obj.get_image_url_safe(self.context.get('request'))
 
 
 class BookDetailSerializer(serializers.ModelSerializer):
@@ -109,10 +106,7 @@ class BookDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_image_url(self, obj):
-        request = self.context.get('request')
-        if obj.image and request:
-            return request.build_absolute_uri(obj.image.url)
-        return obj.image_url
+        return obj.get_image_url_safe(self.context.get('request'))
 
     def get_reviews(self, obj):
         reviews = obj.reviews.all()
