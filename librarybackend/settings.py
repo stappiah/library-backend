@@ -146,50 +146,19 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "verbose": {
-            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "format": "{levelname} {asctime} {module} {message}",
             "style": "{",
-        },
-        "simple": {
-            "format": "{levelname} {message}",
-            "style": "{",
-        },
-    },
-    "filters": {
-        "require_debug_false": {
-            "()": "django.utils.log.RequireDebugFalse",
         },
     },
     "handlers": {
         "console": {
-            "level": "INFO",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
-        "file": {
-            "level": "ERROR",
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": BASE_DIR / "logs" / "django-error.log",
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 5,
-            "formatter": "verbose",
-        },
     },
-    "loggers": {
-        "django": {
-            "handlers": ["console", "file"],
-            "level": "INFO",
-            "propagate": True,
-        },
-        "django.request": {
-            "handlers": ["file"],
-            "level": "ERROR",
-            "propagate": False,
-        },
-        "django.security": {
-            "handlers": ["file"],
-            "level": "WARNING",
-            "propagate": False,
-        },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
     },
 }
 
