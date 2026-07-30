@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -51,3 +52,23 @@ class AuthLoginTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertIn('access', response.data)
         self.assertIn('refresh', response.data)
+
+    def test_me_returns_frontend_compatible_profile_fields(self):
+        user = User.objects.create_user(
+            username='profile-user',
+            email='profile@example.com',
+            password='strongpass123',
+        )
+        profile = user.profile
+        profile.role = 'professor'
+        profile.save(update_fields=['role'])
+
+        self.client.force_authenticate(user=user)
+        response = self.client.get('/api/v1/auth/me/')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn('name', response.data)
+        self.assertIn('plan', response.data)
+        self.assertIn('joined', response.data)
+        self.assertIn('avatarUrl', response.data)
+        self.assertEqual(response.data['role'], 'professor')

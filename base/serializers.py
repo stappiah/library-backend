@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.contrib.auth.models import User
 from .models import (
     Category, Faculty, Vendor, Book, BookImage, Order, OrderItem,
     Cart, CartItem, Wishlist, WishlistItem, Review
@@ -18,12 +19,24 @@ class FacultySerializer(serializers.ModelSerializer):
 
 
 class VendorSerializer(serializers.ModelSerializer):
+    email = serializers.SerializerMethodField()
+    rating = serializers.FloatField(read_only=True)
+    products_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Vendor
         fields = [
-            'id', 'name', 'slug', 'description', 'logo',
-            'phone', 'address', 'is_active', 'created_at', 'updated_at'
+            'id', 'name', 'slug', 'description', 'email', 'logo',
+            'phone', 'address', 'rating', 'products_count',
+            'is_active', 'created_at', 'updated_at'
         ]
+        read_only_fields = ['rating', 'products_count']
+
+    def get_email(self, obj):
+        return obj.email or (obj.user.email if obj.user else '')
+
+    def get_products_count(self, obj):
+        return obj.books.count()
 
 
 class BookImageSerializer(serializers.ModelSerializer):

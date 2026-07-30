@@ -1,23 +1,25 @@
+import os
+import uuid
+from datetime import timedelta
+
 from django.conf import settings
-from django.core.exceptions import ObjectDoesNotExist
-from rest_framework import status, viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
-
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
-from datetime import timedelta
-import uuid
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import UserProfile, PasswordResetToken
 from .serializers import (
     RegisterSerializer, LoginSerializer, UserSerializer,
     UserProfileSerializer, ChangePasswordSerializer,
-    PasswordResetRequestSerializer, PasswordResetConfirmSerializer
+    PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
+    CurrentUserProfileSerializer
 )
 
 
@@ -32,9 +34,13 @@ def authenticate_user(request, email, password):
     if not user.is_active:
         return None
 
-    allowed_domain = getattr(settings, "UNIVERSITY_EMAIL_DOMAIN", "ktu.edu").lower().lstrip("@")
-    if not user.email.lower().endswith(f"@{allowed_domain}"):
-        return None
+    # Only enforce university email domain if the env var is explicitly set
+    # Set RESTRICT_TO_UNIVERSITY_EMAIL=true to enable this check
+    restrict_email = os.environ.get("RESTRICT_TO_UNIVERSITY_EMAIL", "false").lower()
+    if restrict_email in ("true", "1", "yes"):
+        allowed_domain = getattr(settings, "UNIVERSITY_EMAIL_DOMAIN", "ktu.edu").lower().lstrip("@")
+        if not user.email.lower().endswith(f"@{allowed_domain}"):
+            return None
 
     return authenticate(request=request, username=user.username, password=password)
 
@@ -124,14 +130,14 @@ class AuthViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def me(self, request):
-        """Get current user profile"""
+        """Get current user profile in a shape the frontend expects."""
         try:
             profile = request.user.profile
-            serializer = UserProfileSerializer(profile)
-            return Response(serializer.data)
-        except (RelatedObjectDoesNotExist, UserProfile.DoesNotExist):
-            user_data = UserSerializer(request.user).data
-            return Response(user_data)
+        except (ObjectDoesNotExist, UserProfile.DoesNotExist):
+            profile = UserProfile.objects.create(user=request.user, role='customer')
+
+        serializer = CurrentUserProfileSerializer(profile, context={'request': request})
+        return Response(serializer.data)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def change_password(self, request):
@@ -144,7 +150,7 @@ class AuthViewSet(viewsets.ViewSet):
                     {'error': 'Old password is incorrect'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
             user.set_password(serializer.validated_data['new_password'])
             user.save()
             return Response({'message': 'Password changed successfully'})
@@ -160,13 +166,13 @@ class AuthViewSet(viewsets.ViewSet):
                 user = User.objects.get(email=email)
                 token = str(uuid.uuid4())
                 expires_at = timezone.now() + timedelta(hours=24)
-                
+
                 PasswordResetToken.objects.create(
                     user=user,
                     token=token,
                     expires_at=expires_at
                 )
-                
+
                 # Here you would send an email with the reset link
                 return Response({
                     'message': 'Password reset email sent',
@@ -185,26 +191,26 @@ class AuthViewSet(viewsets.ViewSet):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         if serializer.is_valid():
             token = serializer.validated_data['token']
-            
+
             try:
                 reset_token = PasswordResetToken.objects.get(
                     token=token,
                     is_used=False
                 )
-                
+
                 if timezone.now() > reset_token.expires_at:
                     return Response(
                         {'error': 'Reset token has expired'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-                
+
                 user = reset_token.user
                 user.set_password(serializer.validated_data['password'])
                 user.save()
-                
+
                 reset_token.is_used = True
                 reset_token.save()
-                
+
                 return Response({'message': 'Password reset successfully'})
             except PasswordResetToken.DoesNotExist:
                 return Response(
@@ -231,7 +237,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             profile = request.user.profile
             serializer = UserProfileSerializer(profile)
             return Response(serializer.data)
-        except (RelatedObjectDoesNotExist, UserProfile.DoesNotExist):
+        except (ObjectDoesNotExist, UserProfile.DoesNotExist):
             return Response(
                 {'error': 'Profile not found'},
                 status=status.HTTP_404_NOT_FOUND
@@ -247,7 +253,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                 serializer.save()
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        except (RelatedObjectDoesNotExist, UserProfile.DoesNotExist):
+        except (ObjectDoesNotExist, UserProfile.DoesNotExist):
             return Response(
                 {'error': 'Profile not found'},
                 status=status.HTTP_404_NOT_FOUND

@@ -19,9 +19,9 @@ class FacultyAdmin(admin.ModelAdmin):
 
 @admin.register(Vendor)
 class VendorAdmin(admin.ModelAdmin):
-    list_display = ['name', 'slug', 'is_active', 'created_at']
-    list_filter = ['is_active', 'created_at']
-    search_fields = ['name', 'phone', 'address']
+    list_display = ['name', 'slug', 'email', 'rating', 'is_active', 'created_at']
+    list_filter = ['is_active', 'rating', 'created_at']
+    search_fields = ['name', 'email', 'phone', 'address']
     prepopulated_fields = {'slug': ('name',)}
 
 

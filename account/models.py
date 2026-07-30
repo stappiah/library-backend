@@ -5,9 +5,10 @@ from django.contrib.auth.models import User
 class UserProfile(models.Model):
     """Extended User Profile"""
     ROLE_CHOICES = [
-        ('student', 'Student'),
-        ('professor', 'Professor'),
+        ('customer', 'Customer'),
+        ('vendor', 'Vendor'),
         ('admin', 'Admin'),
+        ('superadmin', 'Super Admin'),
     ]
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
@@ -19,7 +20,7 @@ class UserProfile(models.Model):
     last_name = models.CharField(max_length=100, blank=True, null=True)
     bio = models.TextField(blank=True, null=True)
     profile_picture = models.ImageField(upload_to='profiles/', blank=True, null=True)
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='student')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='customer')
     is_verified = models.BooleanField(default=False)
     faculty = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
