@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
     Category, Faculty, Vendor, Book, BookImage, Order, OrderItem,
-    Cart, CartItem, Wishlist, WishlistItem, Review
+    Cart, CartItem, Wishlist, WishlistItem, Review, Download
 )
 
 
@@ -73,9 +73,9 @@ class BookListSerializer(serializers.ModelSerializer):
         model = Book
         fields = [
             'id', 'title', 'slug', 'author', 'description', 'price', 'discount_price',
-            'category', 'category_id', 'category_slug', 'faculty', 'faculty_id', 'vendor', 'vendor_id',
-            'image', 'image_url', 'rating', 'is_featured',
-            'discount_percentage', 'stock'
+            'product_type', 'category', 'category_id', 'category_slug', 'faculty', 'faculty_id', 'vendor', 'vendor_id',
+            'image', 'image_url', 'rating', 'is_featured', 'file_name', 'file_size',
+            'discount_percentage', 'download_expiry_days', 'download_limit'
         ]
 
     def get_image_url(self, obj):
@@ -112,9 +112,10 @@ class BookDetailSerializer(serializers.ModelSerializer):
         model = Book
         fields = [
             'id', 'title', 'slug', 'author', 'description', 'price',
-            'discount_price', 'category', 'category_id', 'category_slug', 'faculty', 'faculty_id', 'vendor', 'vendor_id', 'isbn', 'publisher',
-            'publication_year', 'pages', 'language', 'stock', 'image',
+            'discount_price', 'product_type', 'category', 'category_id', 'category_slug', 'faculty', 'faculty_id', 'vendor', 'vendor_id', 'isbn', 'publisher',
+            'publication_year', 'pages', 'language', 'image',
             'image_url', 'rating', 'is_featured', 'discount_percentage',
+            'file_name', 'file_size', 'download_limit', 'download_expiry_days',
             'gallery_images', 'reviews', 'created_at', 'updated_at'
         ]
 
@@ -182,29 +183,55 @@ class WishlistSerializer(serializers.ModelSerializer):
 
 class OrderItemSerializer(serializers.ModelSerializer):
     book = BookListSerializer(read_only=True)
+    line_total = serializers.ReadOnlyField()
 
     class Meta:
         model = OrderItem
-        fields = ['id', 'book', 'quantity', 'price', 'discount_price']
+        fields = ['id', 'book', 'quantity', 'price', 'discount_price', 'line_total']
 
 
 class OrderListSerializer(serializers.ModelSerializer):
+    item_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Order
         fields = [
-            'id', 'order_number', 'total_price', 'status',
+            'id', 'order_number', 'total_price', 'status', 'item_count',
             'created_at', 'updated_at'
         ]
+
+    def get_item_count(self, obj):
+        return obj.items.count()
 
 
 class OrderDetailSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
+    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
 
     class Meta:
         model = Order
         fields = [
-            'id', 'order_number', 'user', 'total_price', 'status',
-            'shipping_address', 'billing_address', 'phone', 'email',
-            'items', 'notes', 'created_at', 'updated_at'
+            'id', 'order_number', 'user', 'user_name', 'total_price', 'status',
+            'email', 'items', 'notes', 'created_at', 'updated_at'
         ]
         read_only_fields = ['order_number', 'user', 'total_price', 'created_at', 'updated_at']
+
+
+class DownloadSerializer(serializers.ModelSerializer):
+    book = BookListSerializer(read_only=True)
+    order_number = serializers.CharField(source='order.order_number', read_only=True)
+    remaining_downloads = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Download
+        fields = [
+            'id', 'book', 'order_number', 'downloads', 'max_downloads',
+            'remaining_downloads', 'expires_at', 'is_expired', 'is_exhausted',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = fields
+
+    def get_remaining_downloads(self, obj):
+        if obj.max_downloads <= 0:
+            return None  # unlimited
+        return max(0, obj.max_downloads - obj.downloads)

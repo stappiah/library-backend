@@ -1,8 +1,17 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
 from django.utils.text import slugify
 import uuid
+
+PRODUCT_TYPES = (
+    ("ebook", "Ebook"),
+    ("notes", "Lecture Notes"),
+    ("template", "Template"),
+    ("software", "Software"),
+    ("course", "Course Material"),
+)
 
 
 def build_slug(source: str, pk: int | None = None) -> str:
@@ -108,6 +117,7 @@ class Book(models.Model):
     author = models.CharField(max_length=255)
     description = models.TextField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    product_type = models.CharField(max_length=20, choices=PRODUCT_TYPES, default='ebook')
     discount_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='books')
     faculty = models.ForeignKey(Faculty, on_delete=models.SET_NULL, null=True, blank=True, related_name='books')
@@ -117,9 +127,18 @@ class Book(models.Model):
     publication_year = models.IntegerField(blank=True, null=True)
     pages = models.IntegerField(blank=True, null=True)
     language = models.CharField(max_length=50, default='English')
-    stock = models.IntegerField(default=0)
     image = models.ImageField(upload_to='books/', blank=True, null=True)
-    image_url = models.URLField(blank=True, null=True)
+    image_url = models.URLField(
+        blank=True, null=True,
+        help_text="External image URL (e.g. Cloudinary/ImgBB). Takes priority over uploaded image."
+    )
+    digital_file = models.FileField(
+        upload_to="products/files/",
+        blank=True, null=True,
+        help_text="The digital product file (ebook PDF, notes, template, software archive, etc.)"
+    )
+    download_limit = models.PositiveIntegerField(default=5, help_text="Maximum number of allowed downloads per purchase")
+    download_expiry_days = models.PositiveIntegerField(default=30, help_text="Number of days the download link is valid after purchase")
     rating = models.FloatField(
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(5)]
@@ -154,6 +173,23 @@ class Book(models.Model):
         if self.discount_price and self.price:
             return int(((self.price - self.discount_price) / self.price) * 100)
         return 0
+
+    @property
+    def file_name(self):
+        """Filename of the digital product (basename of stored file)."""
+        if self.digital_file:
+            return self.digital_file.name.split("/")[-1]
+        return None
+
+    @property
+    def file_size(self):
+        """Size of the digital product file in bytes (or None)."""
+        if self.digital_file:
+            try:
+                return self.digital_file.size
+            except Exception:
+                return None
+        return None
 
     def get_image_url_safe(self, request=None):
         """Return the best available image URL.
@@ -192,21 +228,19 @@ class BookImage(models.Model):
 
 class Order(models.Model):
     """Order Model"""
+
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('processing', 'Processing'),
-        ('shipped', 'Shipped'),
-        ('delivered', 'Delivered'),
-        ('cancelled', 'Cancelled'),
+        ("pending", "Pending"),
+        ("paid", "Paid"),
+        ("failed", "Failed"),
+        ("cancelled", "Cancelled"),
+        ("refunded", "Refunded"),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
     order_number = models.CharField(max_length=20, unique=True)
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    shipping_address = models.TextField()
-    billing_address = models.TextField(blank=True, null=True)
-    phone = models.CharField(max_length=20)
     email = models.EmailField()
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -220,12 +254,17 @@ class Order(models.Model):
 
 
 class OrderItem(models.Model):
-    """Individual Items in an Order"""
+    """Individual Digital Products in an Order"""
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     book = models.ForeignKey(Book, on_delete=models.CASCADE)
-    quantity = models.IntegerField(validators=[MinValueValidator(1)])
+    quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     price = models.DecimalField(max_digits=10, decimal_places=2)
     discount_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    @property
+    def line_total(self):
+        unit_price = self.discount_price if self.discount_price else self.price
+        return unit_price * self.quantity
 
     class Meta:
         unique_together = ('order', 'book')
@@ -314,3 +353,33 @@ class Review(models.Model):
 
     def __str__(self):
         return f"Review by {self.user.username} for {self.book.title}"
+
+
+class Download(models.Model):
+    """Tracks a user's download rights for a purchased digital product."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='downloads')
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='downloads')
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='downloads')
+    downloads = models.PositiveIntegerField(default=0)
+    max_downloads = models.PositiveIntegerField(default=5)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'book', 'order')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} -> {self.book.title}"
+
+    @property
+    def is_expired(self):
+        return self.expires_at is not None and timezone.now() > self.expires_at
+
+    @property
+    def is_exhausted(self):
+        return self.max_downloads > 0 and self.downloads >= self.max_downloads
+
+    def can_download(self):
+        return not self.is_expired and not self.is_exhausted

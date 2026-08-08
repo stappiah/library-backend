@@ -1,13 +1,16 @@
-# TODO
+# TODO — Fix Vendor Role Assignment on Registration
 
-- [x] Reproduce/confirm why `/api/v1/auth/auth/register/` returns 401.
-- [x] Update routing/permissions so `register` is truly `AllowAny`.
-- [x] Fix serializer so profile fields like `phone_number` are persisted during registration.
-- [x] Run Django tests / verify register works without JWT (201 created, no auth header required).
+## Steps
+- [x] Investigate registration flow (serializer, signals, views, urls)
+- [x] Add `validate_role` to `RegisterSerializer` to accept only valid roles and raise a clear error instead of silently defaulting to `customer`
+- [x] Verify fix at runtime via Django shell — `"role": "vendor"` now saves DB role as `vendor`
+- [x] Re-test via `python manage.py check` (no issues)
 
-## Image Display Fix
+## Root Cause
+The original `create()` had a **silent fallback** — any unrecognized `role` value defaulted to `'customer'` with no error. The `role` CharField also used `default='customer'`.
 
-- [x] Add `get_image_url_safe()` helper method to `Book` model in `base/models.py`
-- [x] Fix `get_image_url` in `base/serializers.py` (both `BookListSerializer` & `BookDetailSerializer`)
-- [x] Create management command `migrate_images_to_cloudinary` to backfill existing book records
+## Fix
+Added `validate_role()` that maps `vendor`/`professor` → `vendor`, `customer`/`student` → `customer`, and raises a clear `ValidationError` for anything else. `create()` now uses the already-validated value.
 
+## Important Finding
+Even with the buggy code, sending `"role": "vendor"` should have mapped to `vendor`. A shell test confirms the fixed code saves `vendor` correctly. **If the live API still returns `customer`, the running dev server must be restarted** to pick up the edited serializer (old bytecode was cached). The client must also send `"role": "vendor"` as a top-level JSON key, which the user's request already did.

@@ -31,7 +31,7 @@ class BookImageInline(admin.TabularInline):
 
 @admin.register(Book)
 class BookAdmin(admin.ModelAdmin):
-    list_display = ['title', 'author', 'price', 'category', 'vendor', 'stock', 'rating', 'is_featured', 'created_at']
+    list_display = ['title', 'author', 'price', 'category', 'vendor', 'rating', 'is_featured', 'created_at']
     list_filter = ['category', 'faculty', 'vendor', 'is_featured', 'created_at']
     search_fields = ['title', 'author', 'isbn']
     prepopulated_fields = {'slug': ('title',)}
@@ -53,7 +53,7 @@ class BookAdmin(admin.ModelAdmin):
             'fields': ('image', 'image_url')
         }),
         ('Status', {
-            'fields': ('stock', 'rating', 'is_featured')
+            'fields': ('rating', 'is_featured')
         }),
     )
 
@@ -100,7 +100,7 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
-    list_display = ['order', 'book', 'quantity', 'price']
+    list_display = ['order', 'book', 'price']
     list_filter = ['order__created_at']
 
 
@@ -112,7 +112,7 @@ class CartAdmin(admin.ModelAdmin):
 
 @admin.register(CartItem)
 class CartItemAdmin(admin.ModelAdmin):
-    list_display = ['cart', 'book', 'quantity']
+    list_display = ['cart', 'book']
 
 
 @admin.register(Wishlist)

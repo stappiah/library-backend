@@ -3,19 +3,21 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.exceptions import PermissionDenied, NotFound
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
-from django.db.models import Q
+from django.utils import timezone
 
 from .models import (
     Category, Faculty, Vendor, Book, BookImage, Order, OrderItem,
-    Cart, CartItem, Wishlist, WishlistItem, Review
+    Cart, CartItem, Wishlist, WishlistItem, Review, Download
 )
 from .serializers import (
     CategorySerializer, FacultySerializer, VendorSerializer,
     BookListSerializer, BookDetailSerializer, BookImageSerializer,
     CartSerializer, CartItemSerializer, WishlistSerializer,
     WishlistItemSerializer, OrderListSerializer, OrderDetailSerializer,
-    ReviewSerializer
+    ReviewSerializer, DownloadSerializer
 )
 
 
@@ -85,7 +87,7 @@ class BookViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = self.queryset
-        
+
         # Filter by category
         category_slug = self.request.query_params.get('category', None)
         if category_slug:
@@ -118,11 +120,20 @@ class BookViewSet(viewsets.ModelViewSet):
         is_featured = self.request.query_params.get('featured', None)
         if is_featured == 'true':
             queryset = queryset.filter(is_featured=True)
+        elif is_featured == 'false':
+            queryset = queryset.filter(is_featured=False)
 
-        # Filter in stock
-        in_stock = self.request.query_params.get('in_stock', None)
-        if in_stock == 'true':
-            queryset = queryset.filter(stock__gt=0)
+        # Filter by digital product type (ebook, notes, template, software, course)
+        product_type = self.request.query_params.get('type', self.request.query_params.get('product_type', None))
+        if product_type:
+            queryset = queryset.filter(product_type=product_type)
+
+        # Only show products that have a downloadable file when requested
+        has_file = self.request.query_params.get('has_file', None)
+        if has_file == 'true':
+            queryset = queryset.exclude(digital_file='').exclude(digital_file__isnull=True)
+        elif has_file == 'false':
+            queryset = queryset.filter(digital_file='') | queryset.filter(digital_file__isnull=True)
 
         return queryset.distinct()
 
@@ -131,7 +142,7 @@ class BookViewSet(viewsets.ModelViewSet):
         """Add book to cart"""
         book = self.get_object()
         cart, _ = Cart.objects.get_or_create(user=request.user)
-        
+
         quantity = request.data.get('quantity', 1)
         try:
             quantity = int(quantity)
@@ -151,7 +162,7 @@ class BookViewSet(viewsets.ModelViewSet):
             book=book,
             defaults={'quantity': quantity}
         )
-        
+
         if not created:
             cart_item.quantity += quantity
             cart_item.save()
@@ -166,7 +177,7 @@ class BookViewSet(viewsets.ModelViewSet):
         """Add book to wishlist"""
         book = self.get_object()
         wishlist, _ = Wishlist.objects.get_or_create(user=request.user)
-        
+
         wishlist_item, created = WishlistItem.objects.get_or_create(
             wishlist=wishlist,
             book=book
@@ -190,6 +201,41 @@ class BookViewSet(viewsets.ModelViewSet):
         reviews = book.reviews.all()
         serializer = ReviewSerializer(reviews, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
+    def download(self, request, slug=None):
+        """Securely stream a purchased digital product file to the user.
+
+        Requires:
+        - An active `Download` entitlement (created when an order is placed)
+        - The download must not be expired or have exhausted its limit
+        """
+        book = self.get_object()
+
+        try:
+            entitlement = Download.objects.get(user=request.user, book=book)
+        except Download.DoesNotExist:
+            raise NotFound('You must purchase this product before downloading it.')
+
+        if not entitlement.can_download():
+            if entitlement.is_expired:
+                raise PermissionDenied('Your download link has expired.')
+            raise PermissionDenied('You have reached the maximum number of downloads for this product.')
+
+        if not book.digital_file:
+            raise NotFound('No digital file is attached to this product yet.')
+
+        # Increment the download counter before streaming.
+        entitlement.downloads += 1
+        entitlement.save(update_fields=['downloads', 'updated_at'])
+
+        file_name = book.file_name or f"{book.slug or 'download'}.file"
+        response = FileResponse(
+            book.digital_file.open('rb'),
+            as_attachment=True,
+            filename=file_name,
+        )
+        return response
 
 
 class BookImageViewSet(viewsets.ModelViewSet):
@@ -219,7 +265,7 @@ class CartViewSet(viewsets.ViewSet):
     def add_item(self, request):
         """Add item to cart"""
         cart, _ = Cart.objects.get_or_create(user=request.user)
-        
+
         book_id = request.data.get('book_id')
         quantity = request.data.get('quantity', 1)
 
@@ -260,7 +306,7 @@ class CartViewSet(viewsets.ViewSet):
     def remove_item(self, request):
         """Remove item from cart"""
         cart = get_object_or_404(Cart, user=request.user)
-        
+
         book_id = request.data.get('book_id')
         try:
             cart_item = CartItem.objects.get(cart=cart, book_id=book_id)
@@ -276,7 +322,7 @@ class CartViewSet(viewsets.ViewSet):
     def update_item(self, request):
         """Update quantity of item in cart"""
         cart = get_object_or_404(Cart, user=request.user)
-        
+
         book_id = request.data.get('book_id')
         quantity = request.data.get('quantity', 1)
 
@@ -327,7 +373,7 @@ class WishlistViewSet(viewsets.ViewSet):
     def add_item(self, request):
         """Add item to wishlist"""
         wishlist, _ = Wishlist.objects.get_or_create(user=request.user)
-        
+
         book_id = request.data.get('book_id')
         try:
             book = Book.objects.get(id=book_id)
@@ -351,7 +397,7 @@ class WishlistViewSet(viewsets.ViewSet):
     def remove_item(self, request):
         """Remove item from wishlist"""
         wishlist = get_object_or_404(Wishlist, user=request.user)
-        
+
         book_id = request.data.get('book_id')
         try:
             wishlist_item = WishlistItem.objects.get(wishlist=wishlist, book_id=book_id)
@@ -387,19 +433,10 @@ class OrderViewSet(viewsets.ModelViewSet):
         return OrderListSerializer
 
     def create(self, request, *args, **kwargs):
-        """Create a new order from the cart or from a direct order payload."""
-        shipping_address = request.data.get('shipping_address')
-        phone = request.data.get('phone')
+        """Create a new digital order from the cart or from a direct order payload."""
         email = request.data.get('email', request.user.email)
-        billing_address = request.data.get('billing_address', shipping_address)
         notes = request.data.get('notes', '')
         items_data = request.data.get('items', None)
-
-        if not shipping_address or not phone:
-            return Response(
-                {'error': 'shipping_address and phone are required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
 
         order_items = []
         total_price = 0
@@ -467,10 +504,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             user=request.user,
             order_number=order_number,
             total_price=total_price,
-            shipping_address=shipping_address,
-            phone=phone,
             email=email,
-            billing_address=billing_address,
             notes=notes,
         )
 
@@ -483,6 +517,18 @@ class OrderViewSet(viewsets.ModelViewSet):
                 discount_price=item_data['discount_price'],
             )
 
+            # Create a Download entitlement for each purchased digital product
+            book = item_data['book']
+            Download.objects.get_or_create(
+                user=request.user,
+                book=book,
+                order=order,
+                defaults={
+                    'max_downloads': book.download_limit,
+                    'expires_at': timezone.now() + timezone.timedelta(days=book.download_expiry_days),
+                }
+            )
+
         if items_data is None:
             cart.items.all().delete()
 
@@ -490,6 +536,22 @@ class OrderViewSet(viewsets.ModelViewSet):
             OrderDetailSerializer(order).data,
             status=status.HTTP_201_CREATED
         )
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def my_orders(self, request):
+        """Get the current user's orders (explicit alias for list)."""
+        orders = self.get_queryset().prefetch_related('items__book')
+        serializer = OrderListSerializer(orders, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+class DownloadViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for a user's purchased digital downloads."""
+    serializer_class = DownloadSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Download.objects.filter(user=self.request.user).select_related('book', 'order')
 
 
 class ReviewViewSet(viewsets.ModelViewSet):
@@ -510,18 +572,11 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         # Only allow updating own reviews
         if serializer.instance.user != self.request.user:
-            return Response(
-                {'error': 'You can only edit your own reviews'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            raise PermissionDenied('You can only edit your own reviews')
         serializer.save()
 
     def perform_destroy(self, instance):
         # Only allow deleting own reviews
         if instance.user != self.request.user:
-            return Response(
-                {'error': 'You can only delete your own reviews'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            raise PermissionDenied('You can only delete your own reviews')
         instance.delete()
-

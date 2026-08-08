@@ -108,6 +108,22 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('A user with this email already exists.')
         return value
 
+    def validate_role(self, value):
+        """Normalize and validate the requested role.
+
+        Raises a clear ValidationError for unrecognized values instead of
+        silently falling back to 'customer' (which hides the real cause).
+        """
+        normalized_role = value.strip().lower()
+        # Map frontend-friendly role values to the backend choices.
+        if normalized_role in ['vendor', 'professor']:
+            return 'vendor'
+        if normalized_role in ['customer', 'student']:
+            return 'customer'
+        raise serializers.ValidationError(
+            f"'{value}' is not a valid role. Choose 'customer' or 'vendor'."
+        )
+
     def validate(self, data):
         if data['password'] != data['password2']:
             raise serializers.ValidationError({'password': 'Passwords must match.'})
@@ -117,16 +133,10 @@ class RegisterSerializer(serializers.ModelSerializer):
         validated_data.pop('password2')
         password = validated_data.pop('password')
         email = validated_data.pop('email')
+        # validate_role already normalized the value; default only when absent.
         role = validated_data.pop('role', 'customer')
 
-        normalized_role = role.strip().lower()
-        # Map frontend-friendly role values to match the backend choices
-        if normalized_role in ['vendor', 'professor']:
-            normalized_role = 'vendor'
-        elif normalized_role in ['customer', 'student']:
-            normalized_role = 'customer'
-        else:
-            normalized_role = 'customer'
+        normalized_role = role
 
         user = User.objects.create_user(
             username=email,
@@ -178,3 +188,4 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         if data['password'] != data['password2']:
             raise serializers.ValidationError({'password': 'Passwords must match.'})
         return data
+
