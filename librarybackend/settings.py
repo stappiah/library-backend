@@ -263,28 +263,46 @@ SIMPLE_JWT = {
 }
 
 # Cloudinary storage (production uploads)
-# Requires env vars: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
-# All three are optional — if missing, local file storage is used instead.
+# Only enable Cloudinary storage when the package is installed and
+# all required env vars are provided. Otherwise, fallback to local
+# file storage so management commands and local development work.
 
-# Cloudinary
-CLOUDINARY_CLOUD_NAME = config("CLOUDINARY_CLOUD_NAME")
-CLOUDINARY_API_KEY = config("CLOUDINARY_API_KEY")
-CLOUDINARY_API_SECRET = config("CLOUDINARY_API_SECRET")
+# Read env vars with safe defaults (None) so missing values don't raise.
+CLOUDINARY_CLOUD_NAME = config("CLOUDINARY_CLOUD_NAME", default=None)
+CLOUDINARY_API_KEY = config("CLOUDINARY_API_KEY", default=None)
+CLOUDINARY_API_SECRET = config("CLOUDINARY_API_SECRET", default=None)
 
-CLOUDINARY_STORAGE = {
-    "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
-    "API_KEY": CLOUDINARY_API_KEY,
-    "API_SECRET": CLOUDINARY_API_SECRET,
-}
+try:
+    import cloudinary_storage  # type: ignore
+    HAS_CLOUDINARY = True
+except Exception:
+    HAS_CLOUDINARY = False
 
-STORAGES = {
-    "default": {
-        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
-    },
-}
+if HAS_CLOUDINARY and CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
+    CLOUDINARY_STORAGE = {
+        "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
+        "API_KEY": CLOUDINARY_API_KEY,
+        "API_SECRET": CLOUDINARY_API_SECRET,
+    }
+
+    STORAGES = {
+        "default": {
+            "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+else:
+    # Fallback to local file storage (safe for development and CI).
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
 
 
 # Default Primary Key Field Type
