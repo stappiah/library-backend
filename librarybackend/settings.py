@@ -20,6 +20,7 @@ import os
 import importlib.util
 from decouple import config
 import dj_database_url
+import cloudinary_storage
 
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -46,6 +47,8 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
+    "cloudinary",
+    "cloudinary_storage",
     # Local apps
     "account",
     "base",
@@ -200,22 +203,30 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 def _package_available(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
-HAS_CLOUDINARY = _package_available("cloudinary") and _package_available("cloudinary_storage")
+# HAS_CLOUDINARY = _package_available("cloudinary") and _package_available("cloudinary_storage")
 
-if HAS_CLOUDINARY and CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
-    DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
-    # Use a hashed static storage backed by Cloudinary when desired
-    STATICFILES_STORAGE = config("STATICFILES_STORAGE", default="cloudinary_storage.storage.StaticHashedCloudinaryStorage")
-    CLOUDINARY_STORAGE = {
-        "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
-        "API_KEY": CLOUDINARY_API_KEY,
-        "API_SECRET": CLOUDINARY_API_SECRET,
-    }
-    # Ensure apps are present
-    if "cloudinary_storage" not in INSTALLED_APPS:
-        INSTALLED_APPS.insert(INSTALLED_APPS.index("corsheaders") + 1, "cloudinary_storage")
-    if "cloudinary" not in INSTALLED_APPS:
-        INSTALLED_APPS.insert(INSTALLED_APPS.index("corsheaders") + 1, "cloudinary")
+# if HAS_CLOUDINARY and CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
+#     DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+#     # Use a hashed static storage backed by Cloudinary when desired
+#     STATICFILES_STORAGE = config("STATICFILES_STORAGE", default="cloudinary_storage.storage.StaticHashedCloudinaryStorage")
+#     CLOUDINARY_STORAGE = {
+#         "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
+#         "API_KEY": CLOUDINARY_API_KEY,
+#         "API_SECRET": CLOUDINARY_API_SECRET,
+#     }
+#     # Ensure apps are present
+#     if "cloudinary_storage" not in INSTALLED_APPS:
+#         INSTALLED_APPS.insert(INSTALLED_APPS.index("corsheaders") + 1, "cloudinary_storage")
+#     if "cloudinary" not in INSTALLED_APPS:
+#         INSTALLED_APPS.insert(INSTALLED_APPS.index("corsheaders") + 1, "cloudinary")
+
+CLOUDINARY_STORAGE = {
+    "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
+    "API_KEY": CLOUDINARY_API_KEY,
+    "API_SECRET": CLOUDINARY_API_SECRET,
+}
+
+DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 # -------------------- JWT config --------------------
 from datetime import timedelta
