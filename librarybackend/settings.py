@@ -198,7 +198,7 @@ def _package_available(name: str) -> bool:
 
 MEDIA_URL = "media/"
 
-if DEBUG == True:
+if DEBUG == False:
     DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 else:
     MEDIA_ROOT = BASE_DIR / "media"
