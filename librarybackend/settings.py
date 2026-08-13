@@ -50,12 +50,12 @@ INSTALLED_APPS = [
     "base",
 ]
 
-# Cloudinary apps (optional - only if cloudinary_storage is installed)
-try:
-    import cloudinary_storage
-    INSTALLED_APPS.extend(["cloudinary_storage", "cloudinary"])
-except ImportError:
-    pass
+# # Cloudinary apps (optional - only if cloudinary_storage is installed)
+# try:
+#     import cloudinary_storage
+#     INSTALLED_APPS.extend(["cloudinary_storage", "cloudinary"])
+# except ImportError:
+#     pass
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
