@@ -204,32 +204,9 @@ class Book(models.Model):
         if self.image:
             try:
                 url = self.image.url
-                # If the URL looks local (starts with MEDIA_URL) but Cloudinary
-                # is enabled, return a Cloudinary fetch URL using the absolute
-                # URL so Cloudinary can retrieve and serve it.
-                from django.conf import settings
-                import logging
-
-                if url and request:
-                    abs_url = request.build_absolute_uri(url)
-                else:
-                    abs_url = url
-
-                # If Cloudinary is enabled and the current URL is a local media
-                # path, return a Cloudinary fetch URL pointing to the absolute URL.
-                if (
-                    getattr(settings, "CLOUDINARY_ENABLED", False)
-                    and abs_url
-                    and (str(url).startswith(str(settings.MEDIA_URL)) or "/media/" in str(url))
-                    and settings.CLOUDINARY_CLOUD_NAME
-                ):
-                    cloud_name = settings.CLOUDINARY_CLOUD_NAME
-                    fetch_url = f"https://res.cloudinary.com/{cloud_name}/image/fetch/{abs_url}"
-                    return fetch_url
-
-                if abs_url:
-                    return abs_url
-                return None
+                if request:
+                    return request.build_absolute_uri(url)
+                return url
             except Exception:
                 return None
         return None
