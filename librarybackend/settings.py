@@ -20,7 +20,7 @@ import os
 import importlib.util
 from decouple import config
 import dj_database_url
-import cloudinary_storage
+from django.core.exceptions import ImproperlyConfigured
 
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,8 +32,12 @@ SECRET_KEY = config("SECRET_KEY", default="")
 # DEBUG should be False in production
 DEBUG = config("DEBUG", default=False, cast=bool)
 
-# Hosts
-ALLOWED_HOSTS = ["library-backend-a3sj.onrender.com", "localhost"]
+# Hosts (load from env, comma-separated)
+ALLOWED_HOSTS = [h.strip() for h in config("ALLOWED_HOSTS", default="library-backend-a3sj.onrender.com,localhost").split(",") if h.strip()]
+
+# Ensure SECRET_KEY is provided in production
+if not DEBUG and not SECRET_KEY:
+    raise ImproperlyConfigured("SECRET_KEY must be set when DEBUG=False")
 
 # -------------------- Installed apps & middleware --------------------
 INSTALLED_APPS = [
@@ -47,12 +51,20 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
-    "cloudinary",
-    "cloudinary_storage",
     # Local apps
     "account",
     "base",
 ]
+
+# Helper to check optional packages
+def _package_available(name: str) -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec(name) is not None
+
+# Add optional Cloudinary apps only when packages exist
+if _package_available("cloudinary") and _package_available("cloudinary_storage"):
+    INSTALLED_APPS += ["cloudinary", "cloudinary_storage"]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -87,13 +99,18 @@ TEMPLATES = [
 WSGI_APPLICATION = "librarybackend.wsgi.application"
 
 # -------------------- Database --------------------
+DATABASE_URL = config("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
 DATABASES = {
     "default": dj_database_url.parse(
-        config("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
+        DATABASE_URL,
         conn_max_age=config("DATABASE_CONN_MAX_AGE", default=600, cast=int),
         ssl_require=config("DATABASE_SSL_REQUIRE", default=False, cast=bool),
     )
 }
+
+# Do not allow SQLite in production by default
+if not DEBUG and (DATABASE_URL.startswith("sqlite:") or DATABASE_URL.endswith("db.sqlite3")):
+    raise ImproperlyConfigured("Using SQLite in production is not supported. Set a proper DATABASE_URL.")
 
 # -------------------- Auth & password validators --------------------
 AUTH_PASSWORD_VALIDATORS = [
@@ -186,28 +203,34 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=True, cast=bool)
 
 # -------------------- Cloudinary & storage --------------------
-
-
 # Default storages (local). We'll enable Cloudinary only when packages and
 # credentials are present.
 DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# Use manifest storage only in production when collectstatic is run
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage" if not DEBUG else "whitenoise.storage.CompressedStaticFilesStorage"
 
-def _package_available(name: str) -> bool:
-    return importlib.util.find_spec(name) is not None
+MEDIA_URL = config("MEDIA_URL", default="/media/")
 
-MEDIA_URL = "media/"
+# Cloudinary credentials (may be empty in local dev)
+CLOUDINARY_CLOUD_NAME = config("CLOUDINARY_CLOUD_NAME", default="")
+CLOUDINARY_API_KEY = config("CLOUDINARY_API_KEY", default="")
+CLOUDINARY_API_SECRET = config("CLOUDINARY_API_SECRET", default="")
 
-if DEBUG == False:
+# Enable Cloudinary only when running in production and packages + creds exist
+CLOUDINARY_ENABLED = False
+if not DEBUG and _package_available("cloudinary") and _package_available("cloudinary_storage"):
+    if not (CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET):
+        raise ImproperlyConfigured("Cloudinary packages installed but CLOUDINARY_* environment variables are missing in production")
+    CLOUDINARY_ENABLED = True
     DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 else:
     MEDIA_ROOT = BASE_DIR / "media"
 
-
 CLOUDINARY_STORAGE = {
-    "CLOUD_NAME": config("CLOUDINARY_CLOUD_NAME", default=""),
-    "API_KEY": config("CLOUDINARY_API_KEY", default=""),
-    "API_SECRET": config("CLOUDINARY_API_SECRET", default=""),
+    "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
+    "API_KEY": CLOUDINARY_API_KEY,
+    "API_SECRET": CLOUDINARY_API_SECRET,
 }
 
 
