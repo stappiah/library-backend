@@ -19,6 +19,9 @@ from django.core.management.base import BaseCommand
 from django.conf import settings
 from base.models import Book
 import logging
+import os
+from django.core.files import File as DjangoFile
+from django.core.files.storage import default_storage
 
 logger = logging.getLogger(__name__)
 
@@ -51,14 +54,44 @@ class Command(BaseCommand):
 
         for book in books:
             try:
-                # Access the image URL via the storage backend (Cloudinary)
-                # This forces Cloudinary to upload the file if not already
-                cloudinary_url = book.image.url
-                book.image_url = cloudinary_url
-                book.save(update_fields=["image_url"])
-                self.stdout.write(
-                    self.style.SUCCESS(f"  Migrated: {book.title} -> {cloudinary_url}")
-                )
+                # If the current default storage is cloudinary, re-save the
+                # existing local file through the storage backend so it gets
+                # uploaded to Cloudinary. Otherwise, attempt to upload via
+                # the storage backend directly.
+                migrated_url = None
+
+                # If the file still exists on disk under MEDIA_ROOT, open and
+                # re-save it through the default storage. This works even when
+                # DEFAULT_FILE_STORAGE is cloudinary_storage.
+                if book.image and hasattr(book.image, 'name'):
+                    local_path = os.path.join(settings.MEDIA_ROOT, book.image.name)
+                    if os.path.exists(local_path):
+                        with open(local_path, 'rb') as f:
+                            django_file = DjangoFile(f)
+                            # Save using the same name so storage backend
+                            # (Cloudinary) will upload and return a URL.
+                            book.image.save(book.image.name, django_file, save=False)
+                            # Ensure storage has produced a URL
+                            migrated_url = book.image.url
+
+                # Fallback: try to get the URL from the storage backend
+                if not migrated_url:
+                    try:
+                        migrated_url = book.image.url
+                    except Exception:
+                        migrated_url = None
+
+                if migrated_url:
+                    book.image_url = migrated_url
+                    book.save(update_fields=["image_url", "image"])
+                    self.stdout.write(
+                        self.style.SUCCESS(f"  Migrated: {book.title} -> {migrated_url}")
+                    )
+                else:
+                    self.stdout.write(
+                        self.style.ERROR(f"  Failed to migrate (no URL): {book.title} (ID: {book.id})")
+                    )
+                    logger.error(f"Migration produced no URL for book {book.id}")
             except Exception as e:
                 self.stdout.write(
                     self.style.ERROR(f"  Failed for {book.title} (ID: {book.id}): {e}")

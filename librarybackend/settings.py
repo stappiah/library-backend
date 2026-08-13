@@ -143,8 +143,8 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+# MEDIA_URL = "/media/"
+# MEDIA_ROOT = BASE_DIR / "media"
 
 # Logging Configuration
 LOGGING = {
@@ -279,37 +279,18 @@ SIMPLE_JWT = {
 # required credentials are provided. Otherwise, fall back to the
 # local file system storage which is safe for development and CI.
 
-# Read env vars with safe defaults (None) so missing values don't raise.
-CLOUDINARY_CLOUD_NAME = config("CLOUDINARY_CLOUD_NAME", default=None)
-CLOUDINARY_API_KEY = config("CLOUDINARY_API_KEY", default=None)
-CLOUDINARY_API_SECRET = config("CLOUDINARY_API_SECRET", default=None)
+CLOUDINARY_CLOUD_NAME = config("CLOUDINARY_CLOUD_NAME")
+CLOUDINARY_API_KEY = config("CLOUDINARY_API_KEY")
+CLOUDINARY_API_SECRET = config("CLOUDINARY_API_SECRET")
 
-# By default use local file storage
-DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
-
-try:
-    import cloudinary_storage  # type: ignore
-    import cloudinary  # type: ignore
-    HAS_CLOUDINARY = True
-except Exception:
-    HAS_CLOUDINARY = False
-
-if HAS_CLOUDINARY and CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
-    # Enable Cloudinary storage
-    DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
-    CLOUDINARY_STORAGE = {
-        "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
-        "API_KEY": CLOUDINARY_API_KEY,
-        "API_SECRET": CLOUDINARY_API_SECRET,
-    }
-    # Add cloudinary apps to INSTALLED_APPS if not present already
-    if "cloudinary_storage" not in INSTALLED_APPS:
-        INSTALLED_APPS.insert( INSTALLED_APPS.index("corsheaders") + 1, "cloudinary_storage" )
-    if "cloudinary" not in INSTALLED_APPS:
-        INSTALLED_APPS.insert( INSTALLED_APPS.index("corsheaders") + 1, "cloudinary" )
-    # Use Cloudinary for static files in production if desired
-    STATICFILES_STORAGE = config("STATICFILES_STORAGE", default="cloudinary_storage.storage.StaticHashedCloudinaryStorage")
-
+STORAGES = {
+    "default": {
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 # Default Primary Key Field Type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
