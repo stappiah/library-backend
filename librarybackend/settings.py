@@ -32,7 +32,7 @@ SECRET_KEY = config("SECRET_KEY", default="")
 DEBUG = config("DEBUG", default=False, cast=bool)
 
 # Hosts
-ALLOWED_HOSTS = [h.strip() for h in config("ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",") if h.strip()]
+ALLOWED_HOSTS = ["library-backend-a3sj.onrender.com", "localhost"]
 
 # -------------------- Installed apps & middleware --------------------
 INSTALLED_APPS = [
