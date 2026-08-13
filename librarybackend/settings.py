@@ -21,6 +21,8 @@ import importlib.util
 from decouple import config
 import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
+import logging
+from urllib.parse import urlparse
 
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -212,15 +214,33 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage" 
 MEDIA_URL = config("MEDIA_URL", default="/media/")
 
 # Cloudinary credentials (may be empty in local dev)
+
+# Support CLOUDINARY_URL (format: cloudinary://API_KEY:API_SECRET@CLOUD_NAME)
+_cloudinary_url = config("CLOUDINARY_URL", default="")
 CLOUDINARY_CLOUD_NAME = config("CLOUDINARY_CLOUD_NAME", default="")
 CLOUDINARY_API_KEY = config("CLOUDINARY_API_KEY", default="")
 CLOUDINARY_API_SECRET = config("CLOUDINARY_API_SECRET", default="")
+
+# If CLOUDINARY_URL is provided, parse it to fill credentials
+if _cloudinary_url:
+    try:
+        parsed = urlparse(_cloudinary_url)
+        # netloc is like 'API_KEY:API_SECRET@CLOUD_NAME'
+        if parsed.scheme == "cloudinary":
+            if parsed.username:
+                CLOUDINARY_API_KEY = parsed.username
+            if parsed.password:
+                CLOUDINARY_API_SECRET = parsed.password
+            if parsed.hostname:
+                CLOUDINARY_CLOUD_NAME = parsed.hostname
+    except Exception:
+        logging.warning("Failed to parse CLOUDINARY_URL; falling back to individual CLOUDINARY_* vars")
 
 # Enable Cloudinary only when running in production and packages + creds exist
 CLOUDINARY_ENABLED = False
 if not DEBUG and _package_available("cloudinary") and _package_available("cloudinary_storage"):
     if not (CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET):
-        raise ImproperlyConfigured("Cloudinary packages installed but CLOUDINARY_* environment variables are missing in production")
+        raise ImproperlyConfigured("Cloudinary packages installed but CLOUDINARY_URL or CLOUDINARY_* environment variables are missing in production")
     CLOUDINARY_ENABLED = True
     DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
     STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"

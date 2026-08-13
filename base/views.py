@@ -133,9 +133,41 @@ class BookViewSet(viewsets.ModelViewSet):
 
         book = serializer.save(vendor=vendor)
 
+        # If storage backend provided a URL (e.g. Cloudinary), persist it to
+        # the `image_url` field so APIs return an absolute, CDN-hosted URL.
+        try:
+            if book.image and not book.image_url:
+                url = None
+                try:
+                    url = book.image.url
+                except Exception:
+                    url = None
+                if url:
+                    book.image_url = url
+                    book.save(update_fields=["image_url"])
+        except Exception:
+            # Do not fail request on best-effort post-processing
+            pass
+
         gallery_files = self.request.FILES.getlist("gallery_images")
         for image_file in gallery_files:
             BookImage.objects.create(book=book, image=image_file)
+
+    def perform_update(self, serializer):
+        # Save updates and ensure uploaded image produces an external URL
+        book = serializer.save()
+        try:
+            if book.image and not book.image_url:
+                url = None
+                try:
+                    url = book.image.url
+                except Exception:
+                    url = None
+                if url:
+                    book.image_url = url
+                    book.save(update_fields=["image_url"])
+        except Exception:
+            pass
 
     def get_queryset(self):
         queryset = self.queryset
