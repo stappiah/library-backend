@@ -112,8 +112,8 @@ STATIC_ROOT = Path(config("STATIC_ROOT", default=str(BASE_DIR / "staticfiles")))
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
 # Media - note: when using Cloudinary, storage backend controls public URL
-MEDIA_URL = config("MEDIA_URL", default="/media/")
-MEDIA_ROOT = Path(config("MEDIA_ROOT", default=str(BASE_DIR / "media")))
+# MEDIA_URL = config("MEDIA_URL", default="/media/")
+# MEDIA_ROOT = Path(config("MEDIA_ROOT", default=str(BASE_DIR / "media")))
 
 # -------------------- Logging --------------------
 LOGGING = {
