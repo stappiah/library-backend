@@ -114,10 +114,6 @@ STATIC_URL = config("STATIC_URL", default="/static/")
 STATIC_ROOT = Path(config("STATIC_ROOT", default=str(BASE_DIR / "staticfiles")))
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
-# Media - note: when using Cloudinary, storage backend controls public URL
-# MEDIA_URL = config("MEDIA_URL", default="/media/")
-# MEDIA_ROOT = Path(config("MEDIA_ROOT", default=str(BASE_DIR / "media")))
-
 # -------------------- Logging --------------------
 LOGGING = {
     "version": 1,
@@ -190,10 +186,7 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=True, cast=bool)
 
 # -------------------- Cloudinary & storage --------------------
-# Read Cloudinary env vars; default to None so missing values don't error
-CLOUDINARY_CLOUD_NAME = config("CLOUDINARY_CLOUD_NAME", default=None)
-CLOUDINARY_API_KEY = config("CLOUDINARY_API_KEY", default=None)
-CLOUDINARY_API_SECRET = config("CLOUDINARY_API_SECRET", default=None)
+
 
 # Default storages (local). We'll enable Cloudinary only when packages and
 # credentials are present.
@@ -203,30 +196,20 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 def _package_available(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
-# HAS_CLOUDINARY = _package_available("cloudinary") and _package_available("cloudinary_storage")
+MEDIA_URL = "media/"
 
-# if HAS_CLOUDINARY and CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
-#     DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
-#     # Use a hashed static storage backed by Cloudinary when desired
-#     STATICFILES_STORAGE = config("STATICFILES_STORAGE", default="cloudinary_storage.storage.StaticHashedCloudinaryStorage")
-#     CLOUDINARY_STORAGE = {
-#         "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
-#         "API_KEY": CLOUDINARY_API_KEY,
-#         "API_SECRET": CLOUDINARY_API_SECRET,
-#     }
-#     # Ensure apps are present
-#     if "cloudinary_storage" not in INSTALLED_APPS:
-#         INSTALLED_APPS.insert(INSTALLED_APPS.index("corsheaders") + 1, "cloudinary_storage")
-#     if "cloudinary" not in INSTALLED_APPS:
-#         INSTALLED_APPS.insert(INSTALLED_APPS.index("corsheaders") + 1, "cloudinary")
+if DEBUG == True:
+    DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+else:
+    MEDIA_ROOT = BASE_DIR / "media"
+
 
 CLOUDINARY_STORAGE = {
-    "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
-    "API_KEY": CLOUDINARY_API_KEY,
-    "API_SECRET": CLOUDINARY_API_SECRET,
+    "CLOUD_NAME": config("CLOUDINARY_CLOUD_NAME", default=""),
+    "API_KEY": config("CLOUDINARY_API_KEY", default=""),
+    "API_SECRET": config("CLOUDINARY_API_SECRET", default=""),
 }
 
-DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 # -------------------- JWT config --------------------
 from datetime import timedelta
