@@ -57,6 +57,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -236,6 +237,17 @@ CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=False, cast=bool)
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 
+# If running in production (DEBUG=False) apply stricter defaults unless
+# explicitly overridden via env vars.
+if not DEBUG:
+    SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)
+    SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=31536000, cast=int)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = config("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=True, cast=bool)
+    SECURE_HSTS_PRELOAD = config("SECURE_HSTS_PRELOAD", default=True, cast=bool)
+    SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=True, cast=bool)
+    CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=True, cast=bool)
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 # University-specific settings
 UNIVERSITY_EMAIL_DOMAIN = os.environ.get("UNIVERSITY_EMAIL_DOMAIN", "ktu.edu")
 
@@ -295,6 +307,8 @@ if HAS_CLOUDINARY and CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINAR
         INSTALLED_APPS.insert( INSTALLED_APPS.index("corsheaders") + 1, "cloudinary_storage" )
     if "cloudinary" not in INSTALLED_APPS:
         INSTALLED_APPS.insert( INSTALLED_APPS.index("corsheaders") + 1, "cloudinary" )
+    # Use Cloudinary for static files in production if desired
+    STATICFILES_STORAGE = config("STATICFILES_STORAGE", default="cloudinary_storage.storage.StaticHashedCloudinaryStorage")
 
 
 # Default Primary Key Field Type
