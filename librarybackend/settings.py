@@ -44,8 +44,6 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
-    "cloudinary",
-    "cloudinary_storage",
     "account",
     "base",
 ]
@@ -265,46 +263,38 @@ SIMPLE_JWT = {
 }
 
 # Cloudinary storage (production uploads)
-# Only enable Cloudinary storage when the package is installed and
-# all required env vars are provided. Otherwise, fallback to local
-# file storage so management commands and local development work.
+# Configure Cloudinary only when the package is installed and all
+# required credentials are provided. Otherwise, fall back to the
+# local file system storage which is safe for development and CI.
 
 # Read env vars with safe defaults (None) so missing values don't raise.
 CLOUDINARY_CLOUD_NAME = config("CLOUDINARY_CLOUD_NAME", default=None)
 CLOUDINARY_API_KEY = config("CLOUDINARY_API_KEY", default=None)
 CLOUDINARY_API_SECRET = config("CLOUDINARY_API_SECRET", default=None)
 
+# By default use local file storage
+DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
+
 try:
     import cloudinary_storage  # type: ignore
+    import cloudinary  # type: ignore
     HAS_CLOUDINARY = True
 except Exception:
     HAS_CLOUDINARY = False
 
 if HAS_CLOUDINARY and CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
+    # Enable Cloudinary storage
+    DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
     CLOUDINARY_STORAGE = {
         "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
         "API_KEY": CLOUDINARY_API_KEY,
         "API_SECRET": CLOUDINARY_API_SECRET,
     }
-
-    STORAGES = {
-        "default": {
-            "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
-        },
-        "staticfiles": {
-            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
-        },
-    }
-else:
-    # Fallback to local file storage (safe for development and CI).
-    STORAGES = {
-        "default": {
-            "BACKEND": "django.core.files.storage.FileSystemStorage",
-        },
-        "staticfiles": {
-            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
-        },
-    }
+    # Add cloudinary apps to INSTALLED_APPS if not present already
+    if "cloudinary_storage" not in INSTALLED_APPS:
+        INSTALLED_APPS.insert( INSTALLED_APPS.index("corsheaders") + 1, "cloudinary_storage" )
+    if "cloudinary" not in INSTALLED_APPS:
+        INSTALLED_APPS.insert( INSTALLED_APPS.index("corsheaders") + 1, "cloudinary" )
 
 
 # Default Primary Key Field Type
