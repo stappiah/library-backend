@@ -27,10 +27,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # -------------------- Core settings --------------------
 # SECURITY: define SECRET_KEY in environment or .env (no default in VCS)
-SECRET_KEY = config("SECRET_KEY", default="")
+SECRET_KEY = os.getenv("SECRET_KEY", default="")
 
 # DEBUG should be False in production
-DEBUG = config("DEBUG", default=False, cast=bool)
+DEBUG = False
 
 # Hosts
 ALLOWED_HOSTS = ["library-backend-a3sj.onrender.com", "localhost"]
@@ -87,11 +87,17 @@ TEMPLATES = [
 WSGI_APPLICATION = "librarybackend.wsgi.application"
 
 # -------------------- Database --------------------
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     }
+# }
+
 DATABASES = {
-    "default": dj_database_url.parse(
-        config("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
-        conn_max_age=config("DATABASE_CONN_MAX_AGE", default=600, cast=int),
-        ssl_require=config("DATABASE_SSL_REQUIRE", default=False, cast=bool),
+    "default": dj_database_url.config(
+        default=os.getenv("DATABASE_URL"),
+        conn_max_age=600,
     )
 }
 
@@ -195,16 +201,16 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 
 
 CLOUDINARY_STORAGE = {
-    "CLOUD_NAME": config("CLOUDINARY_CLOUD_NAME"),
-    "API_KEY": config("CLOUDINARY_API_KEY"),
-    "API_SECRET": config("CLOUDINARY_API_SECRET"),
+    "CLOUD_NAME": os.getenv("CLOUDINARY_CLOUD_NAME"),
+    "API_KEY": os.getenv("CLOUDINARY_API_KEY"),
+    "API_SECRET": os.getenv("CLOUDINARY_API_SECRET"),
 }
 
 
