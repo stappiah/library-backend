@@ -27,13 +27,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # -------------------- Core settings --------------------
 # SECURITY: define SECRET_KEY in environment or .env (no default in VCS)
-SECRET_KEY = os.getenv("SECRET_KEY", default="")
+SECRET_KEY = config("SECRET_KEY")
 
 # DEBUG should be False in production
-DEBUG = False
+DEBUG = True
 
 # Hosts
-ALLOWED_HOSTS = ["library-backend-a3sj.onrender.com", "localhost"]
+ALLOWED_HOSTS = ["library-backend-a3sj.onrender.com", "localhost", "127.0.0.1"]
 
 # -------------------- Installed apps & middleware --------------------
 INSTALLED_APPS = [
@@ -96,7 +96,7 @@ WSGI_APPLICATION = "librarybackend.wsgi.application"
 
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.getenv("DATABASE_URL"),
+        default=config("DATABASE_URL"),
         conn_max_age=600,
     )
 }
@@ -163,7 +163,7 @@ if DEBUG:
 
 # -------------------- CORS & CSRF --------------------
 CORS_ALLOWED_ORIGINS = [o.strip() for o in config("CORS_ALLOWED_ORIGINS", default=
-    "http://localhost:3000,http://localhost:3001,http://127.0.0.1:8000").split(",") if o.strip()]
+    "http://localhost:3000,http://localhost:3001,http://127.0.0.1:8000,https://library-frontend-five-dun.vercel.app").split(",") if o.strip()]
 
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in config("CSRF_TRUSTED_ORIGINS", default="").split(",") if o.strip()]
 
@@ -208,9 +208,9 @@ DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 
 CLOUDINARY_STORAGE = {
-    "CLOUD_NAME": os.getenv("CLOUDINARY_CLOUD_NAME"),
-    "API_KEY": os.getenv("CLOUDINARY_API_KEY"),
-    "API_SECRET": os.getenv("CLOUDINARY_API_SECRET"),
+    "CLOUD_NAME": config("CLOUDINARY_CLOUD_NAME"),
+    "API_KEY": config("CLOUDINARY_API_KEY"),
+    "API_SECRET": config("CLOUDINARY_API_SECRET"),
 }
 
 
