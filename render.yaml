@@ -1,7 +1,0 @@
-services:
-  - type: web
-    plan: free
-    name: library-backend
-    runtime: python
-    buildCommand: './build.sh'
-    startCommand: 'python -m gunicorn librarybackend.asgi:application -k uvicorn.workers.UvicornWorker'
