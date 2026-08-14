@@ -17,11 +17,13 @@ Keep secrets (SECRET_KEY, CLOUDINARY_* etc.) out of version control.
 
 from pathlib import Path
 import os
-import importlib.util
 from decouple import config
 import dj_database_url
-# import cloudinary_storage
+from dotenv import load_dotenv
 
+load_dotenv()  # Load environment variables from .env file if present
+
+CLOUDINARY_URL = os.getenv("CLOUDINARY_URL")
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -208,9 +210,9 @@ DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 
 CLOUDINARY_STORAGE = {
-    "CLOUD_NAME": config("CLOUDINARY_CLOUD_NAME"),
-    "API_KEY": config("CLOUDINARY_API_KEY"),
-    "API_SECRET": config("CLOUDINARY_API_SECRET"),
+    "CLOUD_NAME": os.getenv("CLOUDINARY_CLOUD_NAME"),
+    "API_KEY": os.getenv("CLOUDINARY_API_KEY"),
+    "API_SECRET": os.getenv("CLOUDINARY_API_SECRET"),
 }
 
 
