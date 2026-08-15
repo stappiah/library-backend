@@ -31,7 +31,7 @@ class BookImageInline(admin.TabularInline):
 
 @admin.register(Book)
 class BookAdmin(admin.ModelAdmin):
-    list_display = ['title', 'author', 'price', 'category', 'vendor', 'rating', 'is_featured', 'created_at']
+    list_display = ['title', 'author', 'price', 'category', 'vendor', 'rating', 'digital_file', 'is_featured', 'created_at']
     list_filter = ['category', 'faculty', 'vendor', 'is_featured', 'created_at']
     search_fields = ['title', 'author', 'isbn']
     prepopulated_fields = {'slug': ('title',)}
@@ -50,7 +50,7 @@ class BookAdmin(admin.ModelAdmin):
             'fields': ('isbn', 'publisher', 'publication_year', 'pages', 'language')
         }),
         ('Media', {
-            'fields': ('image', 'image_url')
+            'fields': ('image', 'image_url', 'digital_file')
         }),
         ('Status', {
             'fields': ('rating', 'is_featured')
@@ -82,12 +82,6 @@ class OrderAdmin(admin.ModelAdmin):
         }),
         ('Pricing', {
             'fields': ('total_price',)
-        }),
-        ('Shipping', {
-            'fields': ('shipping_address', 'phone')
-        }),
-        ('Billing', {
-            'fields': ('billing_address', 'email')
         }),
         ('Additional', {
             'fields': ('notes',)

@@ -38,7 +38,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         dry_run = options.get("dry_run", False)
-        books = Book.objects.exclude(image="").exclude(image__isnull=True).filter(image_url__isnull=True)
+        # Find books that still have local media references
+        books = Book.objects.filter(
+            models.Q(image__isnull=False) | models.Q(digital_file__isnull=False)
+        )
 
         if not books.exists():
             self.stdout.write(self.style.SUCCESS("No books found needing migration."))
@@ -54,38 +57,39 @@ class Command(BaseCommand):
 
         for book in books:
             try:
-                # If the current default storage is cloudinary, re-save the
-                # existing local file through the storage backend so it gets
-                # uploaded to Cloudinary. Otherwise, attempt to upload via
-                # the storage backend directly.
-                migrated_url = None
+                migrated_any = False
 
-                # If the file still exists on disk under MEDIA_ROOT, open and
-                # re-save it through the default storage. This works even when
-                # DEFAULT_FILE_STORAGE is cloudinary_storage.
-                if book.image and hasattr(book.image, 'name'):
+                # Migrate image if present
+                if book.image and hasattr(book.image, "name"):
                     local_path = os.path.join(settings.MEDIA_ROOT, book.image.name)
                     if os.path.exists(local_path):
-                        with open(local_path, 'rb') as f:
+                        with open(local_path, "rb") as f:
                             django_file = DjangoFile(f)
-                            # Save using the same name so storage backend
-                            # (Cloudinary) will upload and return a URL.
                             book.image.save(book.image.name, django_file, save=False)
-                            # Ensure storage has produced a URL
-                            migrated_url = book.image.url
+                            try:
+                                migrated_url = book.image.url
+                                book.image_url = migrated_url
+                                migrated_any = True
+                            except Exception:
+                                migrated_url = None
 
-                # Fallback: try to get the URL from the storage backend
-                if not migrated_url:
-                    try:
-                        migrated_url = book.image.url
-                    except Exception:
-                        migrated_url = None
+                # Migrate digital file if present
+                if book.digital_file and hasattr(book.digital_file, "name"):
+                    local_path = os.path.join(settings.MEDIA_ROOT, book.digital_file.name)
+                    if os.path.exists(local_path):
+                        with open(local_path, "rb") as f:
+                            django_file = DjangoFile(f)
+                            book.digital_file.save(book.digital_file.name, django_file, save=False)
+                            try:
+                                migrated_d_url = book.digital_file.url
+                                migrated_any = True
+                            except Exception:
+                                migrated_d_url = None
 
-                if migrated_url:
-                    book.image_url = migrated_url
-                    book.save(update_fields=["image_url", "image"])
+                if migrated_any:
+                    book.save()
                     self.stdout.write(
-                        self.style.SUCCESS(f"  Migrated: {book.title} -> {migrated_url}")
+                        self.style.SUCCESS(f"  Migrated: {book.title} -> image: {getattr(book, 'image_url', '')} digital_file: {getattr(book, 'digital_file', '')}")
                     )
                 else:
                     self.stdout.write(

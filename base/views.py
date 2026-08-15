@@ -4,9 +4,12 @@ from rest_framework.parsers import FormParser, MultiPartParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.exceptions import PermissionDenied, NotFound
-from django.http import FileResponse
+from django.http import FileResponse, StreamingHttpResponse, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+import requests
+import mimetypes
+from urllib.parse import quote as urlquote
 
 from .models import (
     Category,
@@ -38,6 +41,8 @@ from .serializers import (
     OrderDetailSerializer,
     ReviewSerializer,
     DownloadSerializer,
+    VendorOrderSerializer,
+    UserOrderSerializer,
 )
 
 
@@ -92,10 +97,7 @@ class UserShopViewSet(viewsets.ViewSet):
         try:
             vendor = Vendor.objects.get(user=request.user, is_active=True)
 
-            serializer = VendorSerializer(
-                vendor,
-                context={"request": request}
-            )
+            serializer = VendorSerializer(vendor, context={"request": request})
 
             return Response(serializer.data)
 
@@ -283,42 +285,297 @@ class BookViewSet(viewsets.ModelViewSet):
         serializer = ReviewSerializer(reviews, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=["get"], permission_classes=[IsAuthenticated])
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="download",
+        permission_classes=[IsAuthenticated],
+    )
     def download(self, request, slug=None):
-        """Securely stream a purchased digital product file to the user.
+        """Securely download a purchased digital product."""
 
-        Requires:
-        - An active `Download` entitlement (created when an order is placed)
-        - The download must not be expired or have exhausted its limit
-        """
+        print("========== DOWNLOAD ENDPOINT HIT ==========")
+        print("SLUG:", slug)
+        print("USER:", request.user)
+        print("===========================================")
+
         book = self.get_object()
 
         try:
-            entitlement = Download.objects.get(user=request.user, book=book)
+            entitlement = Download.objects.select_related(
+                "order_item__book",
+                "order_item__order",
+            ).get(
+                user=request.user,
+                order_item__book=book,
+                order_item__order__status="paid",
+            )
+
         except Download.DoesNotExist:
+            raise NotFound(
+                "You must purchase this product before downloading it."
+            )
+
+        except Download.MultipleObjectsReturned:
+            entitlement = (
+                Download.objects.select_related(
+                    "order_item__book",
+                    "order_item__order",
+                )
+                .filter(
+                    user=request.user,
+                    order_item__book=book,
+                    order_item__order__status="paid",
+                )
+                .order_by("-created_at")
+                .first()
+            )
+
+            if not entitlement:
+                raise NotFound(
+                    "You must purchase this product before downloading it."
+                )
+
+        if not entitlement.can_download:
+            if entitlement.is_expired:
+                raise PermissionDenied(
+                    "Your download link has expired."
+                )
+
+            if entitlement.is_exhausted:
+                raise PermissionDenied(
+                    "You have reached the maximum number of downloads "
+                    "for this product."
+                )
+
+            raise PermissionDenied(
+                "You are not allowed to download this product."
+            )
+
+        if not book.digital_file:
+            raise NotFound(
+                "No digital file is attached to this product yet."
+            )
+
+        file_name = (
+            book.file_name
+            or f"{book.slug or 'download'}.file"
+        )
+
+        # Try remote storage URL first
+        download_url = None
+
+        try:
+            download_url = getattr(book.digital_file, "url", None)
+        except Exception:
+            download_url = None
+
+        if download_url and str(download_url).startswith(
+            ("http://", "https://")
+        ):
+            try:
+                remote = requests.get(
+                    str(download_url),
+                    stream=True,
+                    timeout=30,
+                )
+
+                if remote.status_code != 200:
+                    return HttpResponse(
+                        f"Remote file fetch failed: {remote.status_code}",
+                        status=502,
+                    )
+
+                content_type = (
+                    remote.headers.get("content-type")
+                    or mimetypes.guess_type(file_name)[0]
+                    or "application/octet-stream"
+                )
+
+                # Only count successful downloads
+                entitlement.downloads += 1
+                entitlement.last_downloaded_at = timezone.now()
+                entitlement.save(
+                    update_fields=[
+                        "downloads",
+                        "last_downloaded_at",
+                        "updated_at",
+                    ]
+                )
+
+                response = StreamingHttpResponse(
+                    remote.iter_content(chunk_size=8192),
+                    content_type=content_type,
+                )
+
+                response["Content-Disposition"] = (
+                    f'attachment; filename="{file_name}"'
+                )
+
+                if remote.headers.get("content-length"):
+                    response["Content-Length"] = (
+                        remote.headers["content-length"]
+                    )
+
+                return response
+
+            except requests.RequestException:
+                pass
+
+        # Fallback to local/storage backend
+        try:
+            response = FileResponse(
+                book.digital_file.open("rb"),
+                as_attachment=True,
+                filename=file_name,
+            )
+
+            entitlement.downloads += 1
+            entitlement.last_downloaded_at = timezone.now()
+            entitlement.save(
+                update_fields=[
+                    "downloads",
+                    "last_downloaded_at",
+                    "updated_at",
+                ]
+            )
+
+            return response
+
+        except Exception:
+            return HttpResponse(
+                "Unable to open digital file for download.",
+                status=500,
+            )
+
+
+@action(detail=True, methods=["get"], url_path="download", permission_classes=[IsAuthenticated])
+def download(self, request, slug=None):
+    """Securely download a purchased digital product."""
+
+
+    print("========== DOWNLOAD ENDPOINT HIT ==========")
+    print("SLUG:", slug)
+    print("USER:", request.user)
+    print("===========================================")
+
+    book = self.get_object()
+
+    # Find a download entitlement for this user and this book.
+    try:
+        entitlement = Download.objects.select_related(
+            "order_item__book", "order_item__order"
+        ).get(
+            user=request.user,
+            order_item__book=book,
+            order_item__order__status="paid",
+        )
+    except Download.DoesNotExist:
+        raise NotFound("You must purchase this product before downloading it.")
+    except Download.MultipleObjectsReturned:
+        # This can happen if the same user purchased the same book
+        # in multiple orders.
+        entitlement = (
+            Download.objects.select_related("order_item__book", "order_item__order")
+            .filter(
+                user=request.user,
+                order_item__book=book,
+                order_item__order__status="paid",
+            )
+            .order_by("-created_at")
+            .first()
+        )
+
+        if not entitlement:
             raise NotFound("You must purchase this product before downloading it.")
 
-        if not entitlement.can_download():
-            if entitlement.is_expired:
-                raise PermissionDenied("Your download link has expired.")
+    # Check download entitlement.
+    if not entitlement.can_download:
+        if entitlement.is_expired:
+            raise PermissionDenied("Your download link has expired.")
+
+        if entitlement.is_exhausted:
             raise PermissionDenied(
                 "You have reached the maximum number of downloads for this product."
             )
 
-        if not book.digital_file:
-            raise NotFound("No digital file is attached to this product yet.")
+        raise PermissionDenied("You are not allowed to download this product.")
 
-        # Increment the download counter before streaming.
-        entitlement.downloads += 1
-        entitlement.save(update_fields=["downloads", "updated_at"])
+    # Make sure a digital file actually exists.
+    if not book.digital_file:
+        raise NotFound("No digital file is attached to this product yet.")
 
-        file_name = book.file_name or f"{book.slug or 'download'}.file"
+    file_name = book.file_name or f"{book.slug or 'download'}.file"
+
+    # Increment download count.
+    entitlement.downloads += 1
+    entitlement.last_downloaded_at = timezone.now()
+
+    entitlement.save(
+        update_fields=[
+            "downloads",
+            "last_downloaded_at",
+            "updated_at",
+        ]
+    )
+
+    # Try remote storage URL first.
+    download_url = None
+
+    try:
+        download_url = getattr(book.digital_file, "url", None)
+    except Exception:
+        download_url = None
+
+    if download_url and str(download_url).startswith(("http://", "https://")):
+        try:
+            remote = requests.get(
+                str(download_url),
+                stream=True,
+                timeout=30,
+            )
+
+            if remote.status_code != 200:
+                return HttpResponse(
+                    f"Remote file fetch failed: {remote.status_code}",
+                    status=502,
+                )
+
+            content_type = (
+                remote.headers.get("content-type")
+                or mimetypes.guess_type(file_name)[0]
+                or "application/octet-stream"
+            )
+
+            response = StreamingHttpResponse(
+                remote.iter_content(chunk_size=8192),
+                content_type=content_type,
+            )
+
+            response["Content-Disposition"] = f'attachment; filename="{file_name}"'
+
+            if remote.headers.get("content-length"):
+                response["Content-Length"] = remote.headers["content-length"]
+
+            return response
+
+        except requests.RequestException:
+            pass
+
+    # Fallback to storage backend.
+    try:
         response = FileResponse(
             book.digital_file.open("rb"),
             as_attachment=True,
             filename=file_name,
         )
         return response
+
+    except Exception:
+        return HttpResponse(
+            "Unable to open digital file for download.",
+            status=500,
+        )
 
 
 class BookImageViewSet(viewsets.ModelViewSet):
@@ -592,24 +849,27 @@ class OrderViewSet(viewsets.ModelViewSet):
         )
 
         for item_data in order_items:
-            OrderItem.objects.create(
+            # Create an OrderItem and snapshot the Book's download settings
+            order_item = OrderItem.objects.create(
                 order=order,
                 book=item_data["book"],
                 quantity=item_data["quantity"],
                 price=item_data["price"],
                 discount_price=item_data["discount_price"],
+                download_limit=getattr(item_data["book"], "download_limit", 3),
+                download_expiry_days=getattr(
+                    item_data["book"], "download_expiry_days", 10
+                ),
             )
 
-            # Create a Download entitlement for each purchased digital product
-            book = item_data["book"]
+            # Create a Download entitlement linked to the OrderItem
             Download.objects.get_or_create(
                 user=request.user,
-                book=book,
-                order=order,
+                order_item=order_item,
                 defaults={
-                    "max_downloads": book.download_limit,
+                    "max_downloads": order_item.download_limit,
                     "expires_at": timezone.now()
-                    + timezone.timedelta(days=book.download_expiry_days),
+                    + timezone.timedelta(days=order_item.download_expiry_days),
                 },
             )
 
@@ -638,7 +898,8 @@ class DownloadViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         return Download.objects.filter(user=self.request.user).select_related(
-            "book", "order"
+            "order_item__book",
+            "order_item__order",
         )
 
 
@@ -669,3 +930,64 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if instance.user != self.request.user:
             raise PermissionDenied("You can only delete your own reviews")
         instance.delete()
+
+
+class VendorOrderListView(viewsets.ReadOnlyModelViewSet):
+    """
+    Returns orders containing products belonging to the
+    currently authenticated vendor.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = VendorOrderSerializer
+
+    def get_vendor(self):
+        try:
+            return Vendor.objects.get(
+                user=self.request.user,
+                is_active=True,
+            )
+        except Vendor.DoesNotExist:
+            raise NotFound("You do not have a vendor account.")
+
+    def get_queryset(self):
+        vendor = self.get_vendor()
+
+        return (
+            Order.objects.filter(items__book__vendor=vendor)
+            .distinct()
+            .prefetch_related(
+                "user",
+                "items__book",
+                "items__book__category",
+                "items__book__faculty",
+                "items__book__vendor",
+            )
+            .order_by("-created_at")
+        )
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["vendor"] = self.get_vendor()
+        return context
+
+
+class UserOrderViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for the authenticated user's orders.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserOrderSerializer
+
+    def get_queryset(self):
+        return (
+            Order.objects.filter(user=self.request.user)
+            .prefetch_related(
+                "items__book",
+                "items__book__vendor",
+                "items__book__category",
+                "items__book__faculty",
+            )
+            .order_by("-created_at")
+        )

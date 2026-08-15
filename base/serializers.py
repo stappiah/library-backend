@@ -110,6 +110,10 @@ class BookListSerializer(serializers.ModelSerializer):
     discount_percentage = serializers.ReadOnlyField()
     image_url = serializers.SerializerMethodField()
 
+    # The actual uploaded `digital_file` remains writable; expose a read-only
+    # `digital_file_url` which returns a storage-aware download URL.
+    digital_file_url = serializers.SerializerMethodField()
+
     file_name = serializers.ReadOnlyField()
     file_size = serializers.ReadOnlyField()
 
@@ -142,6 +146,7 @@ class BookListSerializer(serializers.ModelSerializer):
             "image",
             "image_url",
             "digital_file",
+            "digital_file_url",
             "file_name",
             "file_size",
             "has_digital_file",
@@ -168,6 +173,9 @@ class BookListSerializer(serializers.ModelSerializer):
 
     def get_image_url(self, obj):
         return obj.get_image_url_safe(self.context.get("request"))
+
+    def get_digital_file_url(self, obj):
+        return obj.get_digital_file_url(self.context.get("request"))
 
     def get_has_digital_file(self, obj):
         return bool(obj.digital_file)
@@ -221,6 +229,8 @@ class BookDetailSerializer(serializers.ModelSerializer):
     discount_percentage = serializers.ReadOnlyField()
     image_url = serializers.SerializerMethodField()
 
+    digital_file_url = serializers.SerializerMethodField()
+
     file_name = serializers.ReadOnlyField()
     file_size = serializers.ReadOnlyField()
 
@@ -254,6 +264,7 @@ class BookDetailSerializer(serializers.ModelSerializer):
             "image",
             "image_url",
             "digital_file",
+            "digital_file_url",
             "file_name",
             "file_size",
             "has_digital_file",
@@ -284,6 +295,9 @@ class BookDetailSerializer(serializers.ModelSerializer):
 
     def get_image_url(self, obj):
         return obj.get_image_url_safe(self.context.get("request"))
+
+    def get_digital_file_url(self, obj):
+        return obj.get_digital_file_url(self.context.get("request"))
 
     def get_has_digital_file(self, obj):
         return bool(obj.digital_file)
@@ -485,3 +499,102 @@ class DownloadSerializer(serializers.ModelSerializer):
         if obj.max_downloads <= 0:
             return None  # unlimited
         return max(0, obj.max_downloads - obj.downloads)
+
+
+class VendorOrderSerializer(serializers.ModelSerializer):
+    """
+    Serializer for orders received by a vendor.
+
+    An Order can contain products from multiple vendors,
+    so only this vendor's OrderItems are returned.
+    """
+
+    items = serializers.SerializerMethodField()
+    customer_name = serializers.CharField(
+        source="user.get_full_name",
+        read_only=True,
+    )
+    customer_email = serializers.EmailField(
+        source="user.email",
+        read_only=True,
+    )
+
+    item_count = serializers.SerializerMethodField()
+    vendor_total = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Order
+        fields = [
+            "id",
+            "order_number",
+            "customer_name",
+            "customer_email",
+            "email",
+            "status",
+            "items",
+            "item_count",
+            "vendor_total",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_items(self, obj):
+        vendor = self.context.get("vendor")
+
+        items = obj.items.all()
+
+        if vendor:
+            items = items.filter(book__vendor=vendor)
+
+        return OrderItemSerializer(
+            items,
+            many=True,
+            context=self.context,
+        ).data
+
+    def get_item_count(self, obj):
+        vendor = self.context.get("vendor")
+
+        if vendor:
+            return obj.items.filter(book__vendor=vendor).count()
+
+        return obj.items.count()
+
+    def get_vendor_total(self, obj):
+        vendor = self.context.get("vendor")
+
+        if not vendor:
+            return 0
+
+        items = obj.items.filter(book__vendor=vendor)
+
+        return sum(item.line_total for item in items)
+
+
+class UserOrderSerializer(serializers.ModelSerializer):
+    """
+    Serializer for orders belonging to the authenticated user.
+    Includes all products purchased in the order.
+    """
+
+    items = OrderItemSerializer(many=True, read_only=True)
+
+    item_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Order
+        fields = [
+            "id",
+            "order_number",
+            "total_price",
+            "status",
+            "email",
+            "items",
+            "item_count",
+            "notes",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_item_count(self, obj):
+        return obj.items.count()
