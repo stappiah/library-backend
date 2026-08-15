@@ -451,6 +451,7 @@ class OrderItem(models.Model):
     @property
     def is_digital(self):
         return self.book.product_type in ["ebook", "notes", "template", "software", "course"]
+    
 
 
 class Cart(models.Model):
