@@ -336,11 +336,11 @@ class BookViewSet(viewsets.ModelViewSet):
                     "You must purchase this product before downloading it."
                 )
 
-        if not entitlement.can_download:
-            if entitlement.is_expired:
-                raise PermissionDenied(
-                    "Your download link has expired."
-                )
+        # if not entitlement.can_download:
+        #     if entitlement.is_expired:
+        #         raise PermissionDenied(
+        #             "Your download link has expired."
+        #         )
 
             if entitlement.is_exhausted:
                 raise PermissionDenied(
@@ -489,10 +489,10 @@ def download(self, request, slug=None):
         if not entitlement:
             raise NotFound("You must purchase this product before downloading it.")
 
-    # Check download entitlement.
-    if not entitlement.can_download:
-        if entitlement.is_expired:
-            raise PermissionDenied("Your download link has expired.")
+    # # Check download entitlement.
+    # if not entitlement.can_download:
+    #     if entitlement.is_expired:
+    #         raise PermissionDenied("Your download link has expired.")
 
         if entitlement.is_exhausted:
             raise PermissionDenied(

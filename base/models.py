@@ -602,11 +602,11 @@ class Download(models.Model):
     def is_exhausted(self):
         return self.max_downloads > 0 and self.downloads >= self.max_downloads
 
-    @property
-    def can_download(self):
-        return (
-            not self.is_expired
-            and not self.is_exhausted
-            and self.order.status == "paid"
-            and self.book.has_digital_file
-        )
+    # @property
+    # def can_download(self):
+    #     return (
+    #         not self.is_expired
+    #         and not self.is_exhausted
+    #         # and self.order.status == "paid"
+    #         and self.book.has_digital_file
+    #     )
